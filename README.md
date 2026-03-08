@@ -54,7 +54,7 @@ we use [kiro-cli](https://kiro.dev) and [opencode](https://opencode.ai) — but 
 │  3. the enriched spec goes to a worker agent → it doesn't research,      │
 │     it just works. every file, every line, every acceptance criterion    │
 │     is already in the prompt.                                            │
-│  4. chain 10-15 enriched issues → .agent/run-tasks.sh → epic in hours       │
+│  4. chain 10-15 enriched issues → .agent/run-tasks.sh → epic in hours      │
 └──────────────────────────────────────────────────────────────────────────┘ 
 
        │
