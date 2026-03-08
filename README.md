@@ -1,5 +1,7 @@
 # openengineer
 
+bash is all you need 
+
 autonomous ai agent infrastructure that turns linear issues into commits, PRs, and deploys. battle-tested — runs 150-200 tasks/night in production.
 
 your job becomes: write good specs, add the right labels, sleep. the agents do the rest.
