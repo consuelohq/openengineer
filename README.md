@@ -10,7 +10,7 @@ we use [kiro-cli](https://kiro.dev) and [opencode](https://opencode.ai) — but 
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
-│                 YOUR ISSUES (linear or github — your control plane)       │
+│                 YOUR ISSUES (linear or github — your control plane)      │
 │                                                                          │
 │  the full issue (title + description + every comment) becomes your       │
 │  agent's prompt. every comment you add makes the agent smarter.          │
@@ -20,7 +20,7 @@ we use [kiro-cli](https://kiro.dev) and [opencode](https://opencode.ai) — but 
        ▼                    ▼                         ▼
 ┌──────────────┐  ┌──────────────────┐  ┌──────────────────────────────┐
 │  enrichment  │  │  terminal        │  │  .agent/run-tasks.sh         │
-│              │  │  dispatch         │  │                              │
+│              │  │  dispatch        │  │                              │
 │  @mention a  │  │                  │  │  chains 10-15 issues,        │
 │  research    │  │  webhook opens   │  │  runs for hours unattended,  │
 │  agent in    │  │  a tmux session  │  │  entire epic in one command  │
