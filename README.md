@@ -1,62 +1,82 @@
 # openengineer
 
-bash is all you need 
+bash is all you need.
 
-autonomous ai agent infrastructure that turns linear issues into commits, PRs, and deploys. battle-tested — runs 150-200 tasks/night in production.
+orchestration layer for autonomous ai agents — using linear or github issues as your control plane. battle-tested at 150-200 tasks/night in production.
 
-your job becomes: write good specs, add the right labels, sleep. the agents do the rest.
+your job becomes: write good specs, enrich them with comments, chain 10-15 issues, run one bash command, and go to sleep. the agents do the rest.
+
+we use [kiro-cli](https://kiro.dev) and [opencode](https://opencode.ai) — but the whole system is agent-swappable. use claude code, aider, cursor, or anything that accepts a prompt.
 
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│                        LINEAR (orchestration layer)                  │
-│                                                                      │
-│  write spec ──► add label ──► agents pick it up ──► PR lands         │
-│                                                                      │
-│  the full issue (title + description + every comment) becomes        │
-│  the agent prompt. enrichment comments = better agent output.        │
-└──────────────────────────────────────────────────────────────────────┘
-          │                              │
-          │ @mention in comment          │ assign issue / add label
-          ▼                              ▼
-┌────────────────────┐     ┌────────────────────────────────────────┐
-│  webhook-receiver  │     │            run-tasks.sh                │
-│                    │     │                                        │
-│  kiro-cli chat     │     │  fetch issues ► branch ► implement    │
-│  (multi-turn,      │     │  ► quality gates ► PR ► linear update │
-│   conversational)  │     │  ► deploy ► scenario test ► slack     │
-└────────────────────┘     └────────────────────────────────────────┘
-          │                              │
-          ▼                              ▼
-┌──────────────────────────────────────────────────────────────────────┐
-│                    YOUR AGENT (swappable)                             │
-│                                                                      │
-│  kiro-cli • opencode • claude code • aider • cursor • anything       │
-│  set AGENT_CLI in config.sh — run-tasks.sh doesn't care which        │
-└──────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│                 YOUR ISSUES (linear or github — your control plane)       │
+│                                                                          │
+│  the full issue (title + description + every comment) becomes your       │
+│  agent's prompt. every comment you add makes the agent smarter.          │
+└──────────────────────────────────────────────────────────────────────────┘
+       │                    │                         │
+       │ @mention           │ assign / label          │ chain 10-15 issues
+       ▼                    ▼                         ▼
+┌──────────────┐  ┌──────────────────┐  ┌──────────────────────────────┐
+│  webhook     │  │  webhook         │  │  run-tasks.sh --linear       │
+│  receiver    │  │  receiver        │  │                              │
+│              │  │                  │  │  batch mode: fetches all     │
+│  single      │  │  dispatches to   │  │  open issues, chains them,  │
+│  session     │  │  run-tasks.sh    │  │  runs for hours unattended  │
+│  (question   │  │  for that issue  │  │                              │
+│   → answer   │  │                  │  │  each task = fresh agent     │
+│   → linear)  │  │                  │  │  session, no context bleed   │
+└──────────────┘  └──────────────────┘  └──────────────────────────────┘
+       │                    │                         │
+       ▼                    ▼                         ▼
+┌──────────────────────────────────────────────────────────────────────────┐
+│                       YOUR AGENT (swappable)                             │
+│                                                                          │
+│  kiro-cli • opencode • claude code • aider • cursor • anything           │
+│  set AGENT_CLI in config.sh — run-tasks.sh doesn't care which            │
+└──────────────────────────────────────────────────────────────────────────┘
+       │
+       ▼
+┌──────────────────────────────────────────────────────────────────────────┐
+│                     THE ENRICHMENT WORKFLOW                               │
+│                                                                          │
+│  1. you write your expected outcome (a few lines — what should happen)   │
+│  2. tag a research agent → it explores the codebase, reads patterns,     │
+│     finds the right files, and enriches your spec with implementation    │
+│     details, file:line references, and architecture context              │
+│  3. the enriched spec goes to a worker agent → it doesn't research,     │
+│     it just works. every file, every line, every acceptance criterion    │
+│     is already in the prompt.                                            │
+│  4. chain 10-15 enriched issues → run one command → entire epic in hrs  │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
-## linear as orchestration layer
+## your issues are your orchestration layer
 
-linear isn't just a task tracker here — it's the control plane. the entire issue becomes the agent's prompt:
+linear (or github issues) isn't just your task tracker — it's your whole control plane. the entire issue becomes your agent's prompt:
 
 - **title** → what to do
-- **description** → the full spec (acceptance criteria, file references, architecture notes)
-- **comments** → enrichment context (all comments get concatenated into the prompt)
+- **description** → your full spec (acceptance criteria, file references, architecture notes)
+- **comments** → your enrichment context (all comments get concatenated into the prompt)
 - **labels** → routing (`kiro` label → kiro-cli, `opencode` label → opencode CLI, add your own)
-- **workflow states** → automated pipeline (open → in progress → in review → done)
+- **workflow states** → your automated pipeline (open → in progress → in review → done)
 
-the system fetches issues oldest-first, so multi-part specs execute in order. write part 1, part 2, part 3 as separate issues — they run sequentially.
+issues run oldest-first, so multi-part specs execute in order. write part 1, part 2, part 3 as separate issues — they chain sequentially.
 
 ```bash
-# what the agent actually sees (simplified):
+# what your agent actually sees (simplified):
 # title: implement password reset flow
 # description: <your full spec with acceptance criteria>
 # comments:
-#   **ko** (2026-03-08): the reset token should expire after 1 hour
-#   **ko** (2026-03-08): use the existing email service, don't create a new one
+#   you (2026-03-08): the reset token should expire after 1 hour
+#   you (2026-03-08): use the existing email service, don't create a new one
+#   research-agent (2026-03-08): found AuthService at src/auth/auth.service.ts:84,
+#     uses JWT with 30m expiry. reset flow should follow the same pattern.
+#     existing EmailService at src/email/email.service.ts — use sendTemplate().
 ```
 
-every comment you add makes the agent smarter about that task. this is the leverage — you're not writing code, you're writing context.
+every comment you add makes the agent smarter about that task. this is the leverage — you're not writing code, you're writing context. the research agent enriches your specs so the worker agent doesn't waste cycles exploring — it just builds.
 
 ## run-tasks.sh — the full pipeline
 
@@ -130,7 +150,7 @@ the system doesn't care which agent you use. `config.sh` controls everything:
 
 ```bash
 # config.sh — pick your agent
-AGENT_CLI="kiro"                    # or "opencode", or your own
+AGENT_CLI="kiro"                    # or "opencode", "claude", or your own
 
 # CLI invocation patterns
 KIRO_CMD="kiro-cli chat --trust-all-tools --no-interactive --agent worker"
@@ -139,56 +159,56 @@ OPENCODE_CMD="/opt/homebrew/bin/opencode run -m opencode-go/glm-5"
 
 `get_agent_cmd()` returns the right command. run-tasks.sh calls it generically — swap agents by changing one line.
 
-**to add your own agent:**
+**to bring your own agent:**
 1. set `AGENT_CLI="myagent"` in config.sh
 2. add `MYAGENT_CMD="myagent-cli run"` 
 3. update `get_agent_cmd()` to return it
 4. your agent receives the prompt on stdin and works in the current directory
 
-works with anything that accepts a prompt and writes to the filesystem: claude code, aider, cursor CLI, codex, or a custom wrapper.
+works with anything that accepts a prompt and writes to the filesystem: claude code, aider, cursor CLI, codex, or a custom wrapper. the orchestration layer doesn't care — it just needs something that reads a prompt and makes commits.
 
-## webhook-receiver.py — real-time dispatch
+## webhook-receiver.py — real-time single sessions
 
-stdlib-only python server (no flask, no deps). listens on port 8848.
+stdlib-only python server (no flask, no deps). listens on port 8848. this is how your agents respond in real-time.
 
-### @mention → conversational agent
+### @mention → single session, answer flows back to linear
 ```
 # in a linear comment:
 @kiro why is the auth middleware rejecting valid tokens?
 ```
-sends kiro-cli to a tmux session, polls for output, posts the response back to linear. supports multi-turn — follow-up comments continue the conversation with full history.
+your agent gets a tmux session, investigates, and posts the answer back to linear as a comment. supports multi-turn — follow-up comments continue the conversation with full history. you never leave linear.
 
-### assign → batch runner
-assigning an issue to the agent triggers `run-tasks.sh --issue DEV-1076` in a tmux session. the full pipeline runs: branch, implement, PR, linear update.
+### assign → full pipeline
+assigning an issue to your agent triggers `run-tasks.sh --issue DEV-1076` in a tmux session. the full pipeline runs: branch, implement, PR, linear update.
 
-### github PR reviews → linear triage
+### github PR reviews → automatic triage
 when coderabbit or qodo posts a PR review:
 1. webhook-receiver catches the github webhook
-2. waits 5 minutes for the bot to finish all review passes
+2. waits for the bot to finish all review passes
 3. collects all inline comments, review summaries, and PR comments
 4. creates (or updates) a linear issue with `[review]` label and all findings
-5. the agent can then pick up those triage issues and fix them automatically
+5. your agent can then pick up those triage issues and fix them automatically
 
 ```
-coderabbit reviews PR #42 → webhook creates "[review] CodeRabbit: PR #42" in linear
-→ agent picks it up → fixes the findings → new PR
+coderabbit reviews your PR → webhook creates "[review] CodeRabbit: PR #42" in linear
+→ your agent picks it up → fixes the findings → new PR
 ```
 
 ### oauth token management
-handles linear oauth code exchange and automatic token refresh. agent comments post under the bot's identity, not yours.
+handles linear oauth code exchange and automatic token refresh. your agent's comments post under the bot's identity, not yours — so you always know what came from you vs what came from the agent.
 
 ## quality gates
 
-agents are only safe when they have guardrails. the system enforces quality at multiple levels:
+your agents are only safe when they have guardrails. the system enforces quality at multiple levels:
 
 **agent behavioral prompt** — every agent session starts with instructions to:
-1. read `AGENTS.md` and `CODING-STANDARDS.md` first
-2. read the workpad (acceptance criteria)
+1. read your project's coding standards first
+2. read the workpad (acceptance criteria extracted from the issue)
 3. implement, then self-review every changed file
-4. run `code-review.sh` — all 13 checks must pass
+4. run your quality checks — all must pass
 5. commit only after checks pass
 
-**13 automated checks** (`scripts/code-review.sh`):
+**13 automated checks** (`scripts/code-review.sh`) — these are ours, swap them for yours:
 
 | # | check | what it catches |
 |---|-------|-----------------|
@@ -292,15 +312,16 @@ python3 .agent/webhook-receiver.py &
 
 ## how we use it
 
-this runs in production on [consuelohq/opensaas](https://github.com/consuelohq/opensaas) — a monorepo with 9+ packages. agents process 150-200 linear tasks overnight. the human workflow:
+this runs in production on [consuelohq/opensaas](https://github.com/consuelohq/opensaas) — a monorepo with 9+ packages. agents process 150-200 linear tasks overnight. the workflow:
 
-1. write specs as linear issues with acceptance criteria
-2. add enrichment comments (architecture notes, file references, edge cases)
-3. label with `kiro` or `opencode`
-4. go to sleep
-5. wake up to PRs with linked linear issues, slack notifications, and scenario test results
+1. write a few lines — your expected outcome for each task
+2. tag a research agent to explore the codebase and enrich your specs
+3. review the enriched specs — add comments, tweak acceptance criteria (this is where your taste matters)
+4. label 10-15 issues, run `.agent/run-tasks.sh --linear`
+5. go to sleep
+6. wake up to PRs with linked issues, slack notifications, and scenario test results
 
-the agents handle: branching, implementation, self-review, quality checks, PR creation, linear status updates, deploy verification, and failure recovery.
+the agents handle: branching, implementation, self-review, quality checks, PR creation, status updates, deploy verification, and failure recovery. your job is good specs and good taste — the bash handles everything else.
 
 ## license
 
